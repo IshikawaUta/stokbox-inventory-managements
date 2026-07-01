@@ -35,8 +35,8 @@ def verify_password(password: str, stored: str) -> bool:
 
 def generate_no_transaksi(prefix: str) -> str:
     """Buat nomor transaksi: PREFIX-YYYYMMDD-XXXXXX."""
-    from datetime import datetime
+    from datetime import datetime, timezone
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     suffix = secrets.token_hex(3).upper()
     return f"{prefix}-{now.strftime('%Y%m%d')}-{suffix}"
