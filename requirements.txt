@@ -12,3 +12,5 @@ Pillow
 python-barcode
 python-multipart>=0.0.18
 bcrypt>=4.0.0
+pytest>=8.0.0
+mongomock>=4.0.0
