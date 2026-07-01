@@ -1,7 +1,7 @@
 """Utilitas umum: serialisasi ObjectId, formatter, dsb."""
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Any, Optional
 
 from bson import ObjectId
@@ -56,8 +56,8 @@ def serialize_docs(docs: list[dict]) -> list[dict]:
 
 
 def utcnow() -> datetime:
-    """Kembalikan datetime UTC sekarang (naive)."""
-    return datetime.utcnow()
+    """Kembalikan datetime UTC sekarang (naive, untuk kompatibilitas MongoDB)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def parse_date(value: Any) -> Optional[date]:
