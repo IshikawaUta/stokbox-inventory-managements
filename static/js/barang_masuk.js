@@ -9,7 +9,7 @@ const BarangMasukModule = {
 
     async loadSuplier() {
         try {
-            const res = await api.get('/api/suplier');
+            const res = await api.get('/api/suplier/');
             const sel = document.getElementById('filterSuplier');
             (res.data || []).forEach(s => {
                 sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.nama)}</option>`);
@@ -43,7 +43,7 @@ const BarangMasukModule = {
         if (t2) params.set('tanggal_akhir', t2);
         if (s) params.set('suplier_id', s);
         try {
-            const res = await api.get(`/api/barang-masuk?${params}`);
+            const res = await api.get(`/api/barang-masuk/?${params}`);
             this.renderTable(res.data || []);
         } catch (err) { toast('Gagal', err.message, 'danger'); }
     },

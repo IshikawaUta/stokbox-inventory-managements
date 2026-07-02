@@ -27,7 +27,7 @@ const BarangKeluarModule = {
         if (t2) params.set('tanggal_akhir', t2);
         if (tj) params.set('tujuan', tj);
         try {
-            const res = await api.get(`/api/barang-keluar?${params}`);
+            const res = await api.get(`/api/barang-keluar/?${params}`);
             this.renderTable(res.data || []);
         } catch (err) { toast('Gagal', err.message, 'danger'); }
     },
