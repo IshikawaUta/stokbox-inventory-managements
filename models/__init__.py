@@ -1,42 +1,43 @@
 """Dokumen MongoDB yang digunakan aplikasi."""
+from pymongo.collection import Collection
 from config.database import collection
 
 
-def users() -> collection:
+def users() -> Collection:
     return collection("users")
 
 
-def kategori() -> collection:
+def kategori() -> Collection:
     return collection("kategori")
 
 
-def barang() -> collection:
+def barang() -> Collection:
     return collection("barang")
 
 
-def suplier() -> collection:
+def suplier() -> Collection:
     return collection("suplier")
 
 
-def barang_masuk() -> collection:
+def barang_masuk() -> Collection:
     return collection("barang_masuk")
 
 
-def barang_keluar() -> collection:
+def barang_keluar() -> Collection:
     return collection("barang_keluar")
 
 
-def stok_penyesuaian() -> collection:
+def stok_penyesuaian() -> Collection:
     return collection("stok_penyesuaian")
 
 
-def setting() -> collection:
+def setting() -> Collection:
     return collection("setting")
 
 
-def aktivitas() -> collection:
+def aktivitas() -> Collection:
     return collection("aktivitas")
 
 
-def riwayat_stok() -> collection:
+def riwayat_stok() -> Collection:
     return collection("riwayat_stok")
