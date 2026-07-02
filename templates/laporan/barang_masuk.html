@@ -39,7 +39,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', async () => {
     try {
-        const res = await api.get('/api/suplier');
+        const res = await api.get('/api/suplier/');
         const sel = document.getElementById('filterSuplier');
         (res.data || []).forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.nama)}</option>`));
         initSelect2('#filterSuplier');

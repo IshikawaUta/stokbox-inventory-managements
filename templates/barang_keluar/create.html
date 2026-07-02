@@ -244,7 +244,7 @@ async function submit(e) {
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     try {
         if (id) await api.put(`/api/barang-keluar/${id}`, body);
-        else await api.post('/api/barang-keluar', body);
+        else await api.post('/api/barang-keluar/', body);
         toast('Berhasil', 'Transaksi disimpan', 'success');
         setTimeout(() => window.location.href = '/barang-keluar', 700);
     } catch (err) { toast('Gagal', err.message, 'danger'); }

@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadSuplier() {
     try {
-        const res = await api.get('/api/suplier');
+        const res = await api.get('/api/suplier/');
         const sel = document.getElementById('fieldSuplier');
         (res.data || []).forEach(s => sel.insertAdjacentHTML('beforeend', `<option value="${s.id}">${escapeHtml(s.nama)}</option>`));
     } catch {}
@@ -257,7 +257,7 @@ async function submit(e) {
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     try {
         if (id) await api.put(`/api/barang-masuk/${id}`, body);
-        else await api.post('/api/barang-masuk', body);
+        else await api.post('/api/barang-masuk/', body);
         toast('Berhasil', 'Transaksi disimpan', 'success');
         setTimeout(() => window.location.href = '/barang-masuk', 700);
     } catch (err) { toast('Gagal', err.message, 'danger'); }

@@ -121,7 +121,7 @@ async function submit(e) {
     const btn = document.getElementById('btnSimpan');
     btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Menyimpan...';
     try {
-        await api.post('/api/stok-penyesuaian', body);
+        await api.post('/api/stok-penyesuaian/', body);
         toast('Berhasil', 'Penyesuaian disimpan', 'success');
         setTimeout(() => window.location.href = '/stok-penyesuaian', 700);
     } catch (err) { toast('Gagal', err.message, 'danger'); }
