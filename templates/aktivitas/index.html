@@ -4,6 +4,48 @@
 {% block page_subtitle %}Audit trail aktivitas pengguna{% endblock %}
 
 {% block content %}
+<div class="panel mb-3">
+    <div class="panel-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Cari</label>
+                <input type="text" class="form-control" id="filterKeyword" placeholder="Nama user atau keterangan...">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Aksi</label>
+                <select class="form-select" id="filterAksi">
+                    <option value="">Semua</option>
+                    <option value="create">Buat</option>
+                    <option value="update">Ubah</option>
+                    <option value="delete">Hapus</option>
+                    <option value="cancel">Batal</option>
+                    <option value="import">Import</option>
+                    <option value="login">Login</option>
+                    <option value="logout">Logout</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Entitas</label>
+                <select class="form-select" id="filterEntitas">
+                    <option value="">Semua</option>
+                    <option value="barang">Barang</option>
+                    <option value="kategori">Kategori</option>
+                    <option value="suplier">Suplier</option>
+                    <option value="barang_masuk">Barang Masuk</option>
+                    <option value="barang_keluar">Barang Keluar</option>
+                    <option value="stok_penyesuaian">Penyesuaian Stok</option>
+                    <option value="user">User</option>
+                    <option value="setting">Setting</option>
+                    <option value="backup">Backup</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-light w-100" id="btnReset"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="panel">
     <div class="panel-body p-0">
         <div class="table-responsive">
@@ -22,59 +64,146 @@
                 </tbody>
             </table>
         </div>
+        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+            <div class="text-secondary small" id="aktivitasInfo"></div>
+            <nav id="aktivitasPagination"></nav>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', loadAktivitas);
+const AktivitasModule = {
+    filters: { keyword: '', aksi: '', entitas: '' },
+    page: 1,
+    perPage: 25,
+    totalPages: 1,
 
-const AKSI_LABEL = {
-    create: '<span class="badge text-bg-success">Buat</span>',
-    update: '<span class="badge text-bg-primary">Ubah</span>',
-    delete: '<span class="badge text-bg-danger">Hapus</span>',
-    cancel: '<span class="badge text-bg-warning">Batal</span>',
-    import: '<span class="badge text-bg-info">Import</span>',
-    login: '<span class="badge text-bg-secondary">Login</span>',
-    logout: '<span class="badge text-bg-secondary">Logout</span>',
-};
+    init() {
+        this.bindEvents();
+        this.load();
+    },
 
-const ENTITAS_LABEL = {
-    barang: 'Barang',
-    kategori: 'Kategori',
-    suplier: 'Suplier',
-    barang_masuk: 'Barang Masuk',
-    barang_keluar: 'Barang Keluar',
-    stok_penyesuaian: 'Penyesuaian Stok',
-    user: 'User',
-    setting: 'Setting',
-    backup: 'Backup',
-};
+    bindEvents() {
+        const apply = debounce(() => { this.page = 1; this.load(); }, 300);
+        document.getElementById('filterKeyword').addEventListener('input', (e) => { this.filters.keyword = e.target.value; apply(); });
+        document.getElementById('filterAksi').addEventListener('change', (e) => { this.filters.aksi = e.target.value; this.page = 1; this.load(); });
+        document.getElementById('filterEntitas').addEventListener('change', (e) => { this.filters.entitas = e.target.value; this.page = 1; this.load(); });
+        document.getElementById('btnReset').addEventListener('click', () => {
+            this.filters = { keyword: '', aksi: '', entitas: '' };
+            this.page = 1;
+            document.getElementById('filterKeyword').value = '';
+            document.getElementById('filterAksi').value = '';
+            document.getElementById('filterEntitas').value = '';
+            this.load();
+        });
+    },
 
-async function loadAktivitas() {
-    try {
-        const res = await api.get('/api/aktivitas?limit=200');
-        const items = res.data || [];
+    async load() {
         const tbody = document.getElementById('aktivitasBody');
-        if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">Belum ada aktivitas.</td></tr>';
-            return;
+        try {
+            const params = new URLSearchParams();
+            params.set('page', this.page);
+            params.set('per_page', this.perPage);
+            if (this.filters.keyword) params.set('keyword', this.filters.keyword);
+            if (this.filters.aksi) params.set('aksi', this.filters.aksi);
+            if (this.filters.entitas) params.set('entitas', this.filters.entitas);
+
+            const res = await api.get(`/api/aktivitas/?${params}`);
+            const items = res.data || [];
+            this.totalPages = res.total_pages || 1;
+            const total = res.total || 0;
+
+            if (!items.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">Belum ada aktivitas.</td></tr>';
+                document.getElementById('aktivitasInfo').textContent = '';
+                document.getElementById('aktivitasPagination').innerHTML = '';
+                return;
+            }
+
+            const AKSI_LABEL = {
+                create: '<span class="badge text-bg-success">Buat</span>',
+                update: '<span class="badge text-bg-primary">Ubah</span>',
+                delete: '<span class="badge text-bg-danger">Hapus</span>',
+                cancel: '<span class="badge text-bg-warning">Batal</span>',
+                import: '<span class="badge text-bg-info">Import</span>',
+                login: '<span class="badge text-bg-secondary">Login</span>',
+                logout: '<span class="badge text-bg-secondary">Logout</span>',
+            };
+            const ENTITAS_LABEL = {
+                barang: 'Barang', kategori: 'Kategori', suplier: 'Suplier',
+                barang_masuk: 'Barang Masuk', barang_keluar: 'Barang Keluar',
+                stok_penyesuaian: 'Penyesuaian Stok', user: 'User',
+                setting: 'Setting', backup: 'Backup',
+            };
+
+            tbody.innerHTML = items.map(a => {
+                const aksi = AKSI_LABEL[a.aksi] || escapeHtml(a.aksi);
+                const entitas = ENTITAS_LABEL[a.entitas] || escapeHtml(a.entitas);
+                return `<tr>
+                    <td class="text-nowrap small">${formatDateTime(a.created_at)}</td>
+                    <td><span class="fw-semibold">${escapeHtml(a.user_name)}</span> <span class="text-secondary small">${escapeHtml(a.user_role)}</span></td>
+                    <td>${aksi}</td>
+                    <td>${entitas}</td>
+                    <td>${escapeHtml(a.deskripsi)}</td>
+                </tr>`;
+            }).join('');
+
+            const start = (this.page - 1) * this.perPage + 1;
+            const end = Math.min(this.page * this.perPage, total);
+            document.getElementById('aktivitasInfo').textContent = `Menampilkan ${start}–${end} dari ${total} aktivitas`;
+
+            this.renderPagination();
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center py-4">${escapeHtml(err.message)}</td></tr>`;
         }
-        tbody.innerHTML = items.map(a => {
-            const aksi = AKSI_LABEL[a.aksi] || escapeHtml(a.aksi);
-            const entitas = ENTITAS_LABEL[a.entitas] || escapeHtml(a.entitas);
-            return `<tr>
-                <td class="text-nowrap small">${formatDateTime(a.created_at)}</td>
-                <td><span class="fw-semibold">${escapeHtml(a.user_name)}</span> <span class="text-secondary small">${escapeHtml(a.user_role)}</span></td>
-                <td>${aksi}</td>
-                <td>${entitas}</td>
-                <td>${escapeHtml(a.deskripsi)}</td>
-            </tr>`;
-        }).join('');
-    } catch (err) {
-        document.getElementById('aktivitasBody').innerHTML = `<tr><td colspan="5" class="text-danger text-center py-4">${escapeHtml(err.message)}</td></tr>`;
-    }
-}
+    },
+
+    renderPagination() {
+        const nav = document.getElementById('aktivitasPagination');
+        if (this.totalPages <= 1) { nav.innerHTML = ''; return; }
+
+        let html = '<ul class="pagination pagination-sm mb-0">';
+
+        html += `<li class="page-item ${this.page <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${this.page - 1}">&laquo;</a></li>`;
+
+        const range = 2;
+        let startPage = Math.max(1, this.page - range);
+        let endPage = Math.min(this.totalPages, this.page + range);
+
+        if (startPage > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>`;
+            if (startPage > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            html += `<li class="page-item ${i === this.page ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+        }
+
+        if (endPage < this.totalPages) {
+            if (endPage < this.totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            html += `<li class="page-item"><a class="page-link" href="#" data-page="${this.totalPages}">${this.totalPages}</a></li>`;
+        }
+
+        html += `<li class="page-item ${this.page >= this.totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${this.page + 1}">&raquo;</a></li>`;
+
+        html += '</ul>';
+        nav.innerHTML = html;
+
+        nav.querySelectorAll('a[data-page]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const p = parseInt(link.dataset.page);
+                if (p >= 1 && p <= this.totalPages) { this.page = p; this.load(); }
+            });
+        });
+    },
+};
+
+document.addEventListener('DOMContentLoaded', () => AktivitasModule.init());
 </script>
 {% endblock %}
