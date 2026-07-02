@@ -27,16 +27,18 @@ def list_barang(keyword: str = "", kategori_id: str = "", stok_filter: str = "")
         oid = parse_object_id(kategori_id)
         if oid is not None:
             query["kategori_id"] = oid
-    cursor = barang().find(query).sort("created_at", DESCENDING)
-    all_items = list(cursor)
+
     if stok_filter == "hampir-habis":
+        all_items = list(barang().find(query).sort("created_at", DESCENDING))
         items = [d for d in all_items if 0 < int(d.get("stok", 0)) <= int(d.get("stok_minimum", 0))]
     elif stok_filter == "habis":
-        items = [d for d in all_items if int(d.get("stok", 0)) == 0]
+        query["stok"] = 0
+        items = list(barang().find(query).sort("created_at", DESCENDING))
     elif stok_filter == "tersedia":
+        all_items = list(barang().find(query).sort("created_at", DESCENDING))
         items = [d for d in all_items if int(d.get("stok", 0)) > int(d.get("stok_minimum", 0))]
     else:
-        items = all_items
+        items = list(barang().find(query).sort("created_at", DESCENDING))
 
     kategori_map = {d["_id"]: d for d in kategori().find({})}
     for item in items:
@@ -242,7 +244,7 @@ def check_kode(kode: str, exclude_id: str = "") -> bool:
 
 def dashboard_stats() -> dict:
     """Ringkasan statistik untuk dashboard - lengkap seperti PHP."""
-    from datetime import date, datetime, timedelta
+    from datetime import date, timedelta
     from models import (
         suplier, barang_masuk, barang_keluar, stok_penyesuaian, users
     )
@@ -250,68 +252,69 @@ def dashboard_stats() -> dict:
     total_barang = barang().count_documents({})
     total_kategori = kategori().count_documents({})
     total_suplier = suplier().count_documents({})
-
     total_masuk_all = barang_masuk().count_documents({})
     total_keluar_all = barang_keluar().count_documents({})
 
-    # Count for this month
     today = date.today()
     this_month_start = today.replace(day=1).isoformat()
     next_month_start = (today.replace(day=1) + timedelta(days=32)).replace(day=1).isoformat()
+    month_query = {"$gte": this_month_start, "$lt": next_month_start}
 
-    barang_masuk_bulan = barang_masuk().count_documents({
-        "tanggal_masuk": {"$gte": this_month_start, "$lt": next_month_start}
-    })
-    barang_keluar_bulan = barang_keluar().count_documents({
-        "tanggal_keluar": {"$gte": this_month_start, "$lt": next_month_start}
-    })
-    penyesuaian_bulan = stok_penyesuaian().count_documents({
-        "tanggal_penyesuaian": {"$gte": this_month_start, "$lt": next_month_start}
-    })
+    barang_masuk_bulan = barang_masuk().count_documents({"tanggal_masuk": month_query})
+    barang_keluar_bulan = barang_keluar().count_documents({"tanggal_keluar": month_query})
+    penyesuaian_bulan = stok_penyesuaian().count_documents({"tanggal_penyesuaian": month_query})
 
-    # Qty totals for this month
-    masuk_qty = 0
-    for d in barang_masuk().find({
-        "tanggal_masuk": {"$gte": this_month_start, "$lt": next_month_start}
-    }):
-        for x in d.get("detail", []):
-            masuk_qty += int(x.get("jumlah", 0))
+    # Qty totals via aggregation (server-side, hemat memori)
+    masuk_qty_result = list(barang_masuk().aggregate([
+        {"$match": {"tanggal_masuk": month_query}},
+        {"$unwind": "$detail"},
+        {"$group": {"_id": None, "total": {"$sum": {"$toInt": "$detail.jumlah"}}}},
+    ]))
+    masuk_qty = masuk_qty_result[0]["total"] if masuk_qty_result else 0
 
-    keluar_qty = 0
-    for d in barang_keluar().find({
-        "tanggal_keluar": {"$gte": this_month_start, "$lt": next_month_start}
-    }):
-        for x in d.get("detail", []):
-            keluar_qty += int(x.get("jumlah", 0))
+    keluar_qty_result = list(barang_keluar().aggregate([
+        {"$match": {"tanggal_keluar": month_query}},
+        {"$unwind": "$detail"},
+        {"$group": {"_id": None, "total": {"$sum": {"$toInt": "$detail.jumlah"}}}},
+    ]))
+    keluar_qty = keluar_qty_result[0]["total"] if keluar_qty_result else 0
 
-    penyesuaian_qty = 0
-    for d in stok_penyesuaian().find({
-        "tanggal_penyesuaian": {"$gte": this_month_start, "$lt": next_month_start}
-    }):
-        penyesuaian_qty += int(d.get("selisih", 0))
+    penyesuaian_qty_result = list(stok_penyesuaian().aggregate([
+        {"$match": {"tanggal_penyesuaian": month_query}},
+        {"$group": {"_id": None, "total": {"$sum": {"$toInt": "$selisih"}}}},
+    ]))
+    penyesuaian_qty = penyesuaian_qty_result[0]["total"] if penyesuaian_qty_result else 0
 
-    # Stok hampir habis & kosong
-    hampir_habis = 0
-    stok_kosong = 0
-    for doc in barang().find({}, {"stok": 1, "stok_minimum": 1}):
-        stok = int(doc.get("stok", 0))
-        minimum = int(doc.get("stok_minimum", 0))
-        if stok == 0:
-            stok_kosong += 1
-        if stok <= minimum and stok > 0:
-            hampir_habis += 1
+    # Stok hampir habis & kosong via aggregation
+    stok_stats = list(barang().aggregate([
+        {"$project": {"stok": 1, "stok_minimum": 1}},
+        {"$group": {
+            "_id": None,
+            "stok_kosong": {"$sum": {"$cond": [{"$eq": ["$stok", 0]}, 1, 0]}},
+            "hampir_habis": {"$sum": {"$cond": [
+                {"$and": [{"$gt": ["$stok", 0]}, {"$lte": ["$stok", "$stok_minimum"]}]},
+                1, 0
+            ]}},
+        }},
+    ]))
+    stok_kosong = stok_stats[0]["stok_kosong"] if stok_stats else 0
+    hampir_habis = stok_stats[0]["hampir_habis"] if stok_stats else 0
 
     # User stats
     total_user = users().count_documents({})
     total_staff = users().count_documents({"role": "staff"})
 
-    # Total nilai stok & total stok qty
-    total_nilai = 0
-    total_stok = 0
-    for doc in barang().find({}, {"stok": 1, "harga_satuan": 1}):
-        stok = int(doc.get("stok", 0))
-        total_stok += stok
-        total_nilai += stok * int(doc.get("harga_satuan", 0) or 0)
+    # Total nilai stok via aggregation
+    nilai_result = list(barang().aggregate([
+        {"$project": {"stok": 1, "harga_satuan": 1}},
+        {"$group": {
+            "_id": None,
+            "total_stok": {"$sum": "$stok"},
+            "total_nilai": {"$sum": {"$multiply": ["$stok", {"$ifNull": ["$harga_satuan", 0]}]}},
+        }},
+    ]))
+    total_stok = nilai_result[0]["total_stok"] if nilai_result else 0
+    total_nilai = nilai_result[0]["total_nilai"] if nilai_result else 0
 
     return {
         "total_barang": total_barang,
@@ -384,8 +387,8 @@ def recent_barang_keluar(limit: int = 5) -> list[dict]:
 
 
 def monthly_trend(months: int = 6) -> dict:
-    """Data tren 12 bulan terakhir: masuk vs keluar."""
-    from datetime import date, datetime, timedelta
+    """Data tren N bulan terakhir: masuk vs keluar."""
+    from datetime import date, timedelta
     from collections import defaultdict
     from models import barang_masuk as bm_col, barang_keluar as bk_col
     today = date.today()
@@ -396,26 +399,36 @@ def monthly_trend(months: int = 6) -> dict:
         masuk_map[m.strftime("%Y-%m")] = 0
         keluar_map[m.strftime("%Y-%m")] = 0
 
-    for d in bm_col().find({}):
-        t = d.get("tanggal_masuk")
-        if isinstance(t, str):
-            try: t = datetime.fromisoformat(t).date()
-            except: continue
-        if not isinstance(t, date): continue
-        key = t.strftime("%Y-%m")
-        if key in masuk_map:
-            for x in d.get("detail", []):
-                masuk_map[key] += int(x.get("jumlah", 0))
-    for d in bk_col().find({}):
-        t = d.get("tanggal_keluar")
-        if isinstance(t, str):
-            try: t = datetime.fromisoformat(t).date()
-            except: continue
-        if not isinstance(t, date): continue
-        key = t.strftime("%Y-%m")
-        if key in keluar_map:
-            for x in d.get("detail", []):
-                keluar_map[key] += int(x.get("jumlah", 0))
+    # Aggregation pipeline: parse tanggal string ke $year-$month, lalu group
+    bm_pipeline = [
+        {"$addFields": {"_parsed": {"$dateFromString": {
+            "dateString": "$tanggal_masuk",
+            "onError": None,
+            "onNull": None,
+        }}}},
+        {"$match": {"_parsed": {"$ne": None}}},
+        {"$addFields": {"_key": {"$dateToString": {"format": "%Y-%m", "date": "$_parsed"}}}},
+        {"$match": {"_key": {"$in": list(masuk_map.keys())}}},
+        {"$unwind": "$detail"},
+        {"$group": {"_id": "$_key", "total": {"$sum": {"$toInt": "$detail.jumlah"}}}},
+    ]
+    for r in bm_col().aggregate(bm_pipeline):
+        masuk_map[r["_id"]] = r["total"]
+
+    bk_pipeline = [
+        {"$addFields": {"_parsed": {"$dateFromString": {
+            "dateString": "$tanggal_keluar",
+            "onError": None,
+            "onNull": None,
+        }}}},
+        {"$match": {"_parsed": {"$ne": None}}},
+        {"$addFields": {"_key": {"$dateToString": {"format": "%Y-%m", "date": "$_parsed"}}}},
+        {"$match": {"_key": {"$in": list(keluar_map.keys())}}},
+        {"$unwind": "$detail"},
+        {"$group": {"_id": "$_key", "total": {"$sum": {"$toInt": "$detail.jumlah"}}}},
+    ]
+    for r in bk_col().aggregate(bk_pipeline):
+        keluar_map[r["_id"]] = r["total"]
 
     keys = sorted(masuk_map.keys())
     return {
@@ -427,22 +440,30 @@ def monthly_trend(months: int = 6) -> dict:
 
 def kategori_distribution() -> dict:
     """Distribusi total stok per kategori (top 6 + Lainnya)."""
-    kat_map = {k["_id"]: k.get("nama_kategori", "-") for k in kategori().find({})}
-    totals: dict = {}
-    for d in barang().find({}, {"kategori_id": 1, "stok": 1}):
-        name = kat_map.get(d.get("kategori_id"), "Tanpa Kategori")
-        totals[name] = totals.get(name, 0) + int(d.get("stok", 0))
-    if not totals:
+    pipeline = [
+        {"$lookup": {
+            "from": "kategori",
+            "localField": "kategori_id",
+            "foreignField": "_id",
+            "as": "kat_info",
+        }},
+        {"$unwind": {"path": "$kat_info", "preserveNullAndEmptyArrays": True}},
+        {"$group": {
+            "_id": {"$ifNull": ["$kat_info.nama_kategori", "Tanpa Kategori"]},
+            "total": {"$sum": "$stok"},
+        }},
+        {"$sort": {"total": -1}},
+    ]
+    results = list(barang().aggregate(pipeline))
+    if not results:
         return {"labels": [], "values": []}
-    sorted_items = sorted(totals.items(), key=lambda x: x[1], reverse=True)
-    if len(sorted_items) > 6:
-        top = sorted_items[:6]
-        rest = sum(v for _, v in sorted_items[6:])
-        top.append(("Lainnya", rest))
-        sorted_items = top
+    top = results[:6]
+    if len(results) > 6:
+        rest = sum(r["total"] for r in results[6:])
+        top.append({"_id": "Lainnya", "total": rest})
     return {
-        "labels": [n for n, _ in sorted_items],
-        "values": [v for _, v in sorted_items],
+        "labels": [r["_id"] for r in top],
+        "values": [r["total"] for r in top],
     }
 
 
@@ -517,21 +538,23 @@ def import_xlsx(headers: list[str], rows: list[tuple]) -> dict:
 def top_outgoing_items(limit: int = 5) -> dict:
     """Top barang paling sering keluar (qty). Return labels, values, table."""
     from models import barang_keluar as bk_col
-    totals: dict = {}
-    for d in bk_col().find({}):
-        for x in d.get("detail", []):
-            kode = x.get("kode_barang")
-            nama = x.get("nama_barang")
-            key = f"{kode} - {nama}"
-            totals[key] = totals.get(key, 0) + int(x.get("jumlah", 0))
-
-    if not totals:
+    pipeline = [
+        {"$unwind": "$detail"},
+        {"$group": {
+            "_id": {"$concat": [
+                {"$ifNull": ["$detail.kode_barang", ""]}, " - ", {"$ifNull": ["$detail.nama_barang", ""]}
+            ]},
+            "total": {"$sum": {"$toInt": "$detail.jumlah"}},
+        }},
+        {"$sort": {"total": -1}},
+        {"$limit": limit},
+    ]
+    results = list(bk_col().aggregate(pipeline))
+    if not results:
         return {"labels": [], "values": [], "table": []}
-
-    sorted_items = sorted(totals.items(), key=lambda x: x[1], reverse=True)[:limit]
-    labels = [k for k, _ in sorted_items]
-    values = [v for _, v in sorted_items]
-    table = [{"label": k, "value": v} for k, v in sorted_items]
+    labels = [r["_id"] for r in results]
+    values = [r["total"] for r in results]
+    table = [{"label": r["_id"], "value": r["total"]} for r in results]
     return {"labels": labels, "values": values, "table": table}
 
 
@@ -547,7 +570,6 @@ def catat_riwayat_stok(
     ref_no: str = "",
     keterangan: str = "",
 ) -> None:
-    from datetime import datetime
     from models import riwayat_stok as rs_col
     rs_col().insert_one({
         "barang_id": barang_id,
@@ -560,17 +582,44 @@ def catat_riwayat_stok(
         "ref_id": ref_id,
         "ref_no": ref_no,
         "keterangan": keterangan,
-        "created_at": datetime.now().isoformat(),
+        "created_at": utcnow().isoformat(),
     })
 
 
-def get_riwayat_stok(barang_id: str, limit: int = 100) -> list[dict]:
+def get_riwayat_stok(
+    barang_id: str,
+    keyword: str = "",
+    tipe: str = "",
+    page: int = 1,
+    per_page: int = 25,
+) -> dict:
     from models import riwayat_stok as rs_col
     oid = parse_object_id(barang_id)
     if oid is None:
-        return []
-    docs = list(rs_col().find({"barang_id": str(oid)}).sort("created_at", -1).limit(limit))
-    return serialize_docs(docs)
+        return {"data": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 1}
+
+    query: dict = {"barang_id": str(oid)}
+    if keyword:
+        query["$or"] = [
+            {"ref_no": {"$regex": keyword, "$options": "i"}},
+            {"keterangan": {"$regex": keyword, "$options": "i"}},
+        ]
+    if tipe:
+        query["tipe"] = tipe
+
+    col = rs_col()
+    total = col.count_documents(query)
+    skip = (max(page, 1) - 1) * per_page
+    docs = list(col.find(query).sort("created_at", -1).skip(skip).limit(per_page))
+    total_pages = max(-(-total // per_page), 1) if total else 1
+
+    return {
+        "data": serialize_docs(docs),
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": total_pages,
+    }
 
 
 def recent_penyesuaian(limit: int = 5) -> list[dict]:
