@@ -241,6 +241,14 @@ async def destroy(barang_id: str):
 
 @barang_bp.get("/<barang_id>/riwayat-stok")
 @api_login_required
-async def riwayat_stok(barang_id: str):
-    items = barang_service.get_riwayat_stok(barang_id)
-    return {"data": items}
+async def riwayat_stok(
+    barang_id: str,
+    keyword: str = Query(""),
+    tipe: str = Query(""),
+    page: int = Query(1),
+    per_page: int = Query(25),
+):
+    per_page = min(per_page, 100)
+    return barang_service.get_riwayat_stok(
+        barang_id, keyword=keyword, tipe=tipe, page=page, per_page=per_page,
+    )
