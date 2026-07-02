@@ -29,6 +29,8 @@ logs/
 static/uploads/barang/*
 static/uploads/users/*
 static/uploads/settings/*
+static/uploads/test2/
+static/uploads/test_folder/
 !static/uploads/barang/.gitkeep
 !static/uploads/users/.gitkeep
 !static/uploads/settings/.gitkeep
