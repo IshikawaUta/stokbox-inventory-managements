@@ -7,7 +7,7 @@ const StokPenyesuaianModule = {
 
     async loadTable() {
         try {
-            const res = await api.get('/api/stok-penyesuaian');
+            const res = await api.get('/api/stok-penyesuaian/');
             this.renderTable(res.data || []);
         } catch (err) { toast('Gagal', err.message, 'danger'); }
     },

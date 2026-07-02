@@ -7,7 +7,7 @@ const UserModule = {
 
     async loadTable() {
         try {
-            const res = await api.get('/api/user');
+            const res = await api.get('/api/user/');
             this.renderTable(res.data || []);
         } catch (err) { toast('Gagal', err.message, 'danger'); }
     },
@@ -101,7 +101,7 @@ const UserModule = {
         else if (!id) { toast('Validasi', 'Password wajib untuk user baru', 'warning'); return; }
         try {
             if (id) await api.put(`/api/user/${id}`, body);
-            else await api.post('/api/user', body);
+                else await api.post('/api/user/', body);
             toast('Berhasil', 'User disimpan', 'success');
             bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
             await this.loadTable();

@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadKategori() {
     try {
-        const res = await api.get('/api/kategori');
+        const res = await api.get('/api/kategori/');
         const sel = document.getElementById('filterKategori');
         (res.data || []).forEach(k => {
             sel.insertAdjacentHTML('beforeend', `<option value="${k.id}">${escapeHtml(k.nama_kategori)}</option>`);

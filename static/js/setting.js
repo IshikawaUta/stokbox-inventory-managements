@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadSettings() {
     try {
-        const res = await api.get('/api/setting');
+        const res = await api.get('/api/setting/');
         const s = res.data || {};
         document.getElementById('fieldNama').value = s.nama_aplikasi || '';
         document.getElementById('fieldJudul').value = s.judul_aplikasi || '';
@@ -28,7 +28,7 @@ async function saveSettings(e) {
     };
     if (!body.nama_aplikasi) { toast('Validasi', 'Nama aplikasi wajib diisi', 'warning'); return; }
     try {
-        await api.put('/api/setting', body);
+        await api.put('/api/setting/', body);
         toast('Berhasil', 'Pengaturan disimpan', 'success');
         await loadSettings();
     } catch (err) { toast('Gagal', err.message, 'danger'); }
