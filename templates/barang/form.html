@@ -143,7 +143,7 @@ function updateFotoStatus() {
 
 async function loadKategori() {
     try {
-        const res = await api.get('/api/kategori');
+        const res = await api.get('/api/kategori/');
         const sel = document.getElementById('fieldKategori');
         (res.data || []).forEach(k => {
             sel.insertAdjacentHTML('beforeend', `<option value="${k.id}">${escapeHtml(k.nama_kategori)}</option>`);
@@ -266,7 +266,7 @@ async function submit(e) {
         else if (currentFoto && BARANG_MODE === 'edit') body.foto = currentFoto;
         const id = document.getElementById('fieldId').value;
         if (id) await api.put(`/api/barang/${id}`, body);
-        else await api.post('/api/barang', body);
+        else await api.post('/api/barang/', body);
         toast('Berhasil', 'Data barang disimpan' + (foto ? ' (foto baru terunggah)' : (currentFoto ? ' (foto tidak berubah)' : ' (tanpa foto)')), 'success');
         setTimeout(() => window.location.href = '/barang', 700);
     } catch (err) {
