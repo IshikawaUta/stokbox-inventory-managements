@@ -57,7 +57,7 @@ const KategoriModule = {
 
     async loadTable() {
         try {
-            const data = await api.get('/api/kategori');
+            const data = await api.get('/api/kategori/');
             this.renderTable(data.data || []);
         } catch (err) {
             toast('Gagal memuat data', err.message, 'danger');
@@ -134,7 +134,7 @@ const KategoriModule = {
                 await api.put(`/api/kategori/${id}`, body);
                 toast('Berhasil', 'Kategori diperbarui', 'success');
             } else {
-                await api.post('/api/kategori', body);
+                await api.post('/api/kategori/', body);
                 toast('Berhasil', 'Kategori ditambahkan', 'success');
             }
             bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();

@@ -7,7 +7,7 @@ const SuplierModule = {
 
     async loadTable() {
         try {
-            const data = await api.get('/api/suplier');
+            const data = await api.get('/api/suplier/');
             this.renderTable(data.data || []);
         } catch (err) {
             toast('Gagal memuat data', err.message, 'danger');
@@ -91,7 +91,7 @@ const SuplierModule = {
         if (!body.nama) { toast('Validasi', 'Nama wajib diisi', 'warning'); return; }
         try {
             if (id) await api.put(`/api/suplier/${id}`, body);
-            else await api.post('/api/suplier', body);
+                else await api.post('/api/suplier/', body);
             toast('Berhasil', 'Data suplier disimpan', 'success');
             bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();
             await this.loadTable();
