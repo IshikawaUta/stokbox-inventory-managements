@@ -12,7 +12,6 @@ import cloudinary.api
 from dotenv import load_dotenv
 
 _DOTENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=str(_DOTENV_PATH), override=True)
 
 
 def reload_env() -> None:
