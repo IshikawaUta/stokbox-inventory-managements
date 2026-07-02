@@ -19,7 +19,7 @@ const BarangModule = {
 
     async loadKategori() {
         try {
-            const res = await api.get('/api/kategori');
+            const res = await api.get('/api/kategori/');
             const sel = document.getElementById('filterKategori');
             (res.data || []).forEach(k => {
                 this.kategoriMap[k.id] = k;
@@ -49,7 +49,7 @@ const BarangModule = {
             if (this.filters.keyword) params.set('keyword', this.filters.keyword);
             if (this.filters.kategori_id) params.set('kategori_id', this.filters.kategori_id);
             if (this.filters.stok) params.set('stok', this.filters.stok);
-            const res = await api.get(`/api/barang?${params}`);
+            const res = await api.get(`/api/barang/?${params}`);
             this.renderTable(res.data || []);
         } catch (err) {
             toast('Gagal memuat data', err.message, 'danger');
