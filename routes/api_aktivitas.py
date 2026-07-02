@@ -12,9 +12,14 @@ aktivitas_bp = Blueprint("api-aktivitas", url_prefix="/api/aktivitas")
 @aktivitas_bp.get("")
 @api_login_required
 async def list_aktivitas(
-    limit: int = Query(100),
+    keyword: str = Query(""),
     entitas: str = Query(""),
     aksi: str = Query(""),
+    page: int = Query(1),
+    per_page: int = Query(25),
 ):
-    items = aktivitas_service.list_aktivitas(limit=limit, entitas=entitas, aksi=aksi)
-    return {"data": items}
+    per_page = min(per_page, 100)
+    return aktivitas_service.list_aktivitas(
+        keyword=keyword, entitas=entitas, aksi=aksi,
+        page=page, per_page=per_page,
+    )
