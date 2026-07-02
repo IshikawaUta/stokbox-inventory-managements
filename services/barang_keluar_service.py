@@ -41,11 +41,21 @@ def list_barang_keluar(
     if tujuan:
         query["tujuan_penerima"] = {"$regex": tujuan, "$options": "i"}
 
-    user_map = {u["_id"]: u.get("name") for u in __import__("models").users().find({})}
-    docs = list(barang_keluar().find(query))
-    docs.sort(key=lambda d: (d.get("tanggal_keluar") or "", d.get("created_at") or ""), reverse=True)
+    pipeline = [
+        {"$match": query},
+        {"$lookup": {
+            "from": "users",
+            "localField": "user_id",
+            "foreignField": "_id",
+            "as": "user_info",
+        }},
+        {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}},
+        {"$addFields": {"nama_user": "$user_info.name"}},
+        {"$project": {"user_info": 0}},
+        {"$sort": {"tanggal_keluar": -1, "created_at": -1}},
+    ]
+    docs = list(barang_keluar().aggregate(pipeline))
     for d in docs:
-        d["nama_user"] = user_map.get(d.get("user_id"))
         detail = d.get("detail", [])
         d["item_count"] = len(detail)
         d["total_jumlah"] = sum(int(x.get("jumlah", 0)) for x in detail)
