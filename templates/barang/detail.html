@@ -22,7 +22,6 @@
 {% block scripts %}
 <script>
 const BARANG_ID = {{ barang_id|tojson }};
-document.addEventListener('DOMContentLoaded', loadDetail);
 
 const TIPE_LABEL = {
     masuk: '<span class="badge text-bg-success">Masuk</span>',
@@ -32,19 +31,26 @@ const TIPE_LABEL = {
     batal_penyesuaian: '<span class="badge text-bg-warning">Batal Penyesuaian</span>',
 };
 
+const ENTITAS_LABEL = {
+    barang: 'Barang', kategori: 'Kategori', suplier: 'Suplier',
+    barang_masuk: 'Barang Masuk', barang_keluar: 'Barang Keluar',
+    stok_penyesuaian: 'Penyesuaian Stok', user: 'User',
+    setting: 'Setting', backup: 'Backup',
+};
+
 async function loadDetail() {
     try {
-        const [d, riwayat] = await Promise.all([
-            api.get(`/api/barang/${BARANG_ID}`),
-            api.get(`/api/barang/${BARANG_ID}/riwayat-stok`),
-        ]);
-        render(d, riwayat.data || []);
+        const d = await api.get(`/api/barang/${BARANG_ID}`);
+        render(d);
+        initRiwayat();
+        loadRiwayat();
     } catch (err) {
-        document.getElementById('detailContent').innerHTML = `<div class="text-danger">${escapeHtml(err.message)}</div>`;
+        document.getElementById('detailContent').innerHTML =
+            `<div class="text-danger">${escapeHtml(err.message)}</div>`;
     }
 }
 
-function render(d, riwayat) {
+function render(d) {
     const foto = d.foto && d.foto.url
         ? `<img src="${d.foto.url}" class="preview-photo rounded" alt="">`
         : `<div class="preview-placeholder"><i class="bi bi-box"></i></div>`;
@@ -76,7 +82,6 @@ function render(d, riwayat) {
                 </div>
             </div>
         </div>
-
         <div class="row g-3">
             <div class="col-md-6">
                 <div class="panel h-100">
@@ -97,27 +102,117 @@ function render(d, riwayat) {
                 </div>
             </div>
         </div>
-
         <div class="panel mt-3">
             <div class="panel-header"><h6 class="panel-title">Riwayat Stok</h6></div>
-            <div class="panel-body p-0" id="riwayatStokContainer">
-                <div class="text-center py-4 text-secondary">Memuat riwayat stok...</div>
+            <div class="panel-body pb-0">
+                <div class="row g-2 align-items-end mb-3">
+                    <div class="col-md-4">
+                        <input type="text" class="form-control form-control-sm" id="filterRiwayatKeyword" placeholder="Cari no. transaksi atau keterangan...">
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select form-select-sm" id="filterRiwayatTipe">
+                            <option value="">Semua Tipe</option>
+                            <option value="masuk">Masuk</option>
+                            <option value="keluar">Keluar</option>
+                            <option value="penyesuaian">Penyesuaian</option>
+                            <option value="edit_stok_awal">Edit Stok Awal</option>
+                            <option value="batal_penyesuaian">Batal Penyesuaian</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-light btn-sm w-100" id="btnResetRiwayat"><i class="bi bi-arrow-counterclockwise"></i> Reset</button>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Waktu</th><th>Tipe</th><th class="text-end">Sebelum</th><th class="text-end">Perubahan</th><th class="text-end">Sesudah</th><th>Referensi</th><th>Keterangan</th></tr></thead>
+                        <tbody id="riwayatBody">
+                            <tr><td colspan="7" class="text-center py-4"><div class="spinner"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top">
+                    <div class="text-secondary small" id="riwayatInfo"></div>
+                    <nav id="riwayatPagination"></nav>
+                </div>
             </div>
         </div>
     </div>`;
-
-    renderRiwayat(riwayat);
 }
 
-function renderRiwayat(items) {
-    const container = document.getElementById('riwayatStokContainer');
-    if (!items || !items.length) {
-        container.innerHTML = '<div class="text-center py-4 text-secondary">Belum ada riwayat perubahan stok.</div>';
-        return;
-    }
-    container.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle mb-0">
-        <thead><tr><th>Waktu</th><th>Tipe</th><th class="text-end">Sebelum</th><th class="text-end">Perubahan</th><th class="text-end">Sesudah</th><th>Referensi</th><th>Keterangan</th></tr></thead>
-        <tbody>${items.map(r => {
+let riwayatState = { page: 1, perPage: 15, totalPages: 1, filters: { keyword: '', tipe: '' } };
+let _riwayatBound = false;
+let _riwayatDebounce = null;
+
+function initRiwayat() {
+    if (_riwayatBound) return;
+    _riwayatBound = true;
+
+    _riwayatDebounce = debounce(() => { riwayatState.page = 1; loadRiwayat(); }, 300);
+
+    document.addEventListener('input', (e) => {
+        if (e.target && e.target.id === 'filterRiwayatKeyword') {
+            riwayatState.filters.keyword = e.target.value;
+            _riwayatDebounce();
+        }
+    });
+
+    document.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'filterRiwayatTipe') {
+            riwayatState.filters.tipe = e.target.value;
+            riwayatState.page = 1;
+            loadRiwayat();
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('#btnResetRiwayat');
+        if (btn) {
+            riwayatState.filters = { keyword: '', tipe: '' };
+            riwayatState.page = 1;
+            const kw = document.getElementById('filterRiwayatKeyword');
+            const tp = document.getElementById('filterRiwayatTipe');
+            if (kw) kw.value = '';
+            if (tp) tp.value = '';
+            loadRiwayat();
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        const link = e.target.closest('a[data-page]');
+        if (link) {
+            e.preventDefault();
+            const p = parseInt(link.dataset.page);
+            if (p >= 1 && p <= riwayatState.totalPages) { riwayatState.page = p; loadRiwayat(); }
+        }
+    });
+}
+
+async function loadRiwayat() {
+    const container = document.getElementById('riwayatBody');
+    if (!container) return;
+    try {
+        const params = new URLSearchParams();
+        params.set('page', riwayatState.page);
+        params.set('per_page', riwayatState.perPage);
+        if (riwayatState.filters.keyword) params.set('keyword', riwayatState.filters.keyword);
+        if (riwayatState.filters.tipe) params.set('tipe', riwayatState.filters.tipe);
+
+        const res = await api.get(`/api/barang/${BARANG_ID}/riwayat-stok?${params}`);
+        const items = res.data || [];
+        riwayatState.totalPages = res.total_pages || 1;
+        const total = res.total || 0;
+
+        if (!items.length) {
+            container.innerHTML = '<tr><td colspan="7" class="text-center text-secondary py-4">Belum ada riwayat perubahan stok.</td></tr>';
+            document.getElementById('riwayatInfo').textContent = '';
+            document.getElementById('riwayatPagination').innerHTML = '';
+            return;
+        }
+
+        container.innerHTML = items.map(r => {
             const perubahan = parseInt(r.perubahan || 0);
             const cls = perubahan > 0 ? 'text-success' : (perubahan < 0 ? 'text-danger' : 'text-secondary');
             const icon = perubahan > 0 ? '▲' : (perubahan < 0 ? '▼' : '•');
@@ -131,7 +226,49 @@ function renderRiwayat(items) {
                 <td class="small">${r.ref_no ? escapeHtml(r.ref_no) : '-'}</td>
                 <td class="small text-secondary">${escapeHtml(r.keterangan || '-')}</td>
             </tr>`;
-        }).join('')}</tbody></table></div>`;
+        }).join('');
+
+        const start = (riwayatState.page - 1) * riwayatState.perPage + 1;
+        const end = Math.min(riwayatState.page * riwayatState.perPage, total);
+        document.getElementById('riwayatInfo').textContent = `Menampilkan ${start}–${end} dari ${total} riwayat`;
+
+        renderRiwayatPagination();
+    } catch (err) {
+        container.innerHTML = `<tr><td colspan="7" class="text-danger text-center py-4">${escapeHtml(err.message)}</td></tr>`;
+    }
 }
+
+function renderRiwayatPagination() {
+    const nav = document.getElementById('riwayatPagination');
+    if (!nav || riwayatState.totalPages <= 1) { if (nav) nav.innerHTML = ''; return; }
+
+    let html = '<ul class="pagination pagination-sm mb-0">';
+    html += `<li class="page-item ${riwayatState.page <= 1 ? 'disabled' : ''}">
+        <a class="page-link" href="#" data-page="${riwayatState.page - 1}">&laquo;</a></li>`;
+
+    const range = 2;
+    let startPage = Math.max(1, riwayatState.page - range);
+    let endPage = Math.min(riwayatState.totalPages, riwayatState.page + range);
+
+    if (startPage > 1) {
+        html += `<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>`;
+        if (startPage > 2) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    for (let i = startPage; i <= endPage; i++) {
+        html += `<li class="page-item ${i === riwayatState.page ? 'active' : ''}">
+            <a class="page-link" href="#" data-page="${i}">${i}</a></li>`;
+    }
+    if (endPage < riwayatState.totalPages) {
+        if (endPage < riwayatState.totalPages - 1) html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+        html += `<li class="page-item"><a class="page-link" href="#" data-page="${riwayatState.totalPages}">${riwayatState.totalPages}</a></li>`;
+    }
+
+    html += `<li class="page-item ${riwayatState.page >= riwayatState.totalPages ? 'disabled' : ''}">
+        <a class="page-link" href="#" data-page="${riwayatState.page + 1}">&raquo;</a></li>`;
+    html += '</ul>';
+    nav.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', loadDetail);
 </script>
 {% endblock %}
