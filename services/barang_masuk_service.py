@@ -43,14 +43,24 @@ def list_barang_masuk(
         if oid is not None: query["suplier_id"] = oid
 
     suplier_map = {s["_id"]: s.get("nama") for s in suplier().find({})}
-    user_map = {u["_id"]: u.get("name") for u in __import__("models").users().find({})}
 
-    docs = list(barang_masuk().find(query))
-    docs.sort(key=lambda d: (d.get("tanggal_masuk") or "", d.get("created_at") or ""), reverse=True)
+    pipeline = [
+        {"$match": query},
+        {"$lookup": {
+            "from": "users",
+            "localField": "user_id",
+            "foreignField": "_id",
+            "as": "user_info",
+        }},
+        {"$unwind": {"path": "$user_info", "preserveNullAndEmptyArrays": True}},
+        {"$addFields": {"nama_user": "$user_info.name"}},
+        {"$project": {"user_info": 0}},
+        {"$sort": {"tanggal_masuk": -1, "created_at": -1}},
+    ]
+    docs = list(barang_masuk().aggregate(pipeline))
     for d in docs:
         sid = d.get("suplier_id")
         d["nama_suplier"] = suplier_map.get(sid) if sid else None
-        d["nama_user"] = user_map.get(d.get("user_id"))
         detail = d.get("detail", [])
         d["item_count"] = len(detail)
         d["total_jumlah"] = sum(int(x.get("jumlah", 0)) for x in detail)
