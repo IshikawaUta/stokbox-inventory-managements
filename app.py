@@ -1,4 +1,4 @@
-"""Aplikasi InventarisKu - Sistem Manajemen Inventaris berbasis Fenrir v3.1.3 + MongoDB Atlas + Cloudinary."""
+"""Aplikasi InventarisKu - Sistem Manajemen Inventaris berbasis Fenrir v4.1.2 + MongoDB Atlas + Cloudinary."""
 from __future__ import annotations
 
 import os
@@ -6,35 +6,35 @@ import sys
 from datetime import date, datetime
 
 from dotenv import load_dotenv
+load_dotenv()
+
 from fenrir import (
     Fenrir, HTTPException, JSONResponse, render_template, send_file, send_from_directory,
-    CORSMiddleware, GZipMiddleware, RequestIDMiddleware, RateLimitMiddleware,
+    CORSMiddleware, GZipMiddleware, RequestIDMiddleware, RateLimitMiddleware, session,
 )
 from fenrir.templating import Jinja2Renderer
 from fenrir.features import init_fenrir_monitoring
 
 from config.database import ping as mongo_ping
 
-load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 app = Fenrir(
     title="InventarisKu API",
-    version="3.1.3",
+    version="4.1.2",
     template_folder="templates",
     dev_mode=os.getenv("FENRIR_DEV_MODE", "0") == "1",
 )
 
-# ── Performance Middleware (Fenrir v3.1.3) ─────────────────────────────
+# ── Performance Middleware (Fenrir v4.1.2) ─────────────────────────────
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True)
-app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(RateLimitMiddleware, max_requests=200, window_seconds=60)
+app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 
 
-# ── Monitoring (Fenrir v3.1.3) ──────────────────────────────────────────
+# ── Monitoring (Fenrir v4.1.2) ──────────────────────────────────────────
 init_fenrir_monitoring(app)
 
 
@@ -85,7 +85,7 @@ def _format_datetime(value, default="-"):
 _renderer = Jinja2Renderer(os.path.join(BASE_DIR, "templates"))
 _renderer.env.globals["APP"] = {
     "name": os.getenv("APP_NAME", "InventarisKu"),
-    "version": "3.1.3",
+    "version": "4.1.2",
 }
 _renderer.env.filters["formatNumber"] = _format_number
 _renderer.env.filters["formatRupiah"] = _format_rupiah
@@ -101,19 +101,15 @@ class _SessionProxy:
     """Proxy ke fenrir.session (request-bound)."""
 
     def get(self, key, default=None):
-        from fenrir import session
         return session.get(key, default)
 
     def __getitem__(self, key):
-        from fenrir import session
         return session[key]
 
     def __contains__(self, key):
-        from fenrir import session
         return key in session
 
     def keys(self):
-        from fenrir import session
         return list(session.keys())
 
 
@@ -181,7 +177,7 @@ async def _error_context(detail: str = "") -> dict:
         "app_favicon": favicon if (favicon and (favicon.startswith("/") or favicon.startswith("http"))) else "/favicon.ico",
         "APP": {
             "name": os.getenv("APP_NAME", "InventarisKu"),
-            "version": "3.1.3",
+            "version": "4.1.2",
         },
     }
 
