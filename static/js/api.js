@@ -1,7 +1,16 @@
 /* API Client + UI helpers */
+function _getCookie(name) {
+    const val = document.cookie.split(';').find(c => c.trim().startsWith(name + '='));
+    return val ? decodeURIComponent(val.split('=')[1]) : '';
+}
+
 const api = {
     async request(method, url, body, isForm) {
         const opts = { method, headers: { 'Accept': 'application/json' }, credentials: 'same-origin' };
+        if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+            const csrf = _getCookie('_csrf_token');
+            if (csrf) opts.headers['X-CSRF-Token'] = csrf;
+        }
         if (body !== undefined && body !== null) {
             if (isForm === 'formdata' || (isForm && body instanceof FormData)) {
                 opts.body = body;
@@ -42,6 +51,8 @@ function _uploadXHR(url, formData) {
         xhr.open('POST', url);
         xhr.withCredentials = true;
         xhr.setRequestHeader('Accept', 'application/json');
+        const csrf = _getCookie('_csrf_token');
+        if (csrf) xhr.setRequestHeader('X-CSRF-Token', csrf);
         xhr.responseType = 'text';
         xhr.onload = () => {
             const text = xhr.responseText;
