@@ -1,8 +1,11 @@
 """API transaksi barang masuk."""
 from __future__ import annotations
 
-from fenrir import Body, Blueprint, HTTPBadRequest, HTTPNotFound, Query, session
+import asyncio
 
+from fenrir import Body, Blueprint, Depends, HTTPBadRequest, HTTPNotFound, Query, session
+
+from config.schemas import PaginationParams
 from services import barang_masuk_service
 from utils.decorators import api_login_required, role_required
 
@@ -16,8 +19,10 @@ async def index(
     tanggal_awal: str = Query(""),
     tanggal_akhir: str = Query(""),
     suplier_id: str = Query(""),
+    pagination: PaginationParams = Depends(PaginationParams),
 ):
-    return {"data": barang_masuk_service.list_barang_masuk(
+    return {"data": await asyncio.to_thread(
+        barang_masuk_service.list_barang_masuk,
         keyword=keyword, tanggal_awal=tanggal_awal, tanggal_akhir=tanggal_akhir, suplier_id=suplier_id
     )}
 
@@ -26,13 +31,13 @@ async def index(
 @api_login_required
 async def generate_number():
     from utils.security import generate_no_transaksi
-    return {"no_transaksi": generate_no_transaksi("BM")}
+    return {"no_transaksi": await asyncio.to_thread(generate_no_transaksi, "BM")}
 
 
 @bm_bp.get("/<transaksi_id>")
 @api_login_required
 async def show(transaksi_id: str):
-    doc = barang_masuk_service.get_barang_masuk(transaksi_id)
+    doc = await asyncio.to_thread(barang_masuk_service.get_barang_masuk, transaksi_id)
     if not doc:
         raise HTTPNotFound("Transaksi tidak ditemukan.")
     return doc
@@ -45,7 +50,7 @@ async def create(payload: dict = Body(...)):
     if not payload.get("user_id") and session.get("userId"):
         payload["user_id"] = session.get("userId")
     try:
-        return barang_masuk_service.create_barang_masuk(payload)
+        return await asyncio.to_thread(barang_masuk_service.create_barang_masuk, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
 
@@ -57,7 +62,7 @@ async def update(transaksi_id: str, payload: dict = Body(...)):
     if not payload.get("user_id") and session.get("userId"):
         payload["user_id"] = session.get("userId")
     try:
-        result = barang_masuk_service.update_barang_masuk(transaksi_id, payload)
+        result = await asyncio.to_thread(barang_masuk_service.update_barang_masuk, transaksi_id, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     if not result:
@@ -69,7 +74,7 @@ async def update(transaksi_id: str, payload: dict = Body(...)):
 @role_required("admin")
 async def destroy(transaksi_id: str):
     try:
-        deleted = barang_masuk_service.delete_barang_masuk(transaksi_id)
+        deleted = await asyncio.to_thread(barang_masuk_service.delete_barang_masuk, transaksi_id)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     if not deleted:

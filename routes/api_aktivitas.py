@@ -1,8 +1,11 @@
 """API untuk aktivitas / audit trail."""
 from __future__ import annotations
 
-from fenrir import Blueprint, Query
+import asyncio
 
+from fenrir import Blueprint, Depends, Query
+
+from config.schemas import PaginationParams
 from services import aktivitas_service
 from utils.decorators import api_login_required
 
@@ -15,11 +18,10 @@ async def list_aktivitas(
     keyword: str = Query(""),
     entitas: str = Query(""),
     aksi: str = Query(""),
-    page: int = Query(1),
-    per_page: int = Query(25),
+    pagination: PaginationParams = Depends(PaginationParams),
 ):
-    per_page = min(per_page, 100)
-    return aktivitas_service.list_aktivitas(
+    return await asyncio.to_thread(
+        aktivitas_service.list_aktivitas,
         keyword=keyword, entitas=entitas, aksi=aksi,
-        page=page, per_page=per_page,
+        page=pagination.page, per_page=pagination.per_page,
     )

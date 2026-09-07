@@ -1,6 +1,8 @@
 """Route autentikasi (login & logout)."""
 from __future__ import annotations
 
+import asyncio
+
 from fenrir import Blueprint, Body, HTTPBadRequest, HTTPUnauthorized, session
 
 from services import auth_service
@@ -14,7 +16,7 @@ async def login(payload: dict = Body(...)):
     password = payload.get("password") or ""
     if not email or not password:
         raise HTTPBadRequest("Email dan password wajib diisi.")
-    user = auth_service.authenticate(email, password)
+    user = await asyncio.to_thread(auth_service.authenticate, email, password)
     if user is None:
         raise HTTPUnauthorized("Email atau password salah.")
     if not user.get("is_active", True):

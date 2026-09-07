@@ -1,6 +1,8 @@
 """API manajemen user."""
 from __future__ import annotations
 
+import asyncio
+
 from fenrir import Body, Blueprint, File, HTTPBadRequest, HTTPNotFound, UploadFile, session
 
 from services import auth_service
@@ -15,7 +17,7 @@ user_bp = Blueprint("api-user", url_prefix="/api/user")
 @api_login_required
 @role_required("admin")
 async def index():
-    return {"data": auth_service.list_users()}
+    return {"data": await asyncio.to_thread(auth_service.list_users)}
 
 
 @user_bp.post("")
@@ -23,7 +25,7 @@ async def index():
 @role_required("admin")
 async def create(payload: dict = Body(...)):
     try:
-        return auth_service.create_user(payload)
+        return await asyncio.to_thread(auth_service.create_user, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
 
@@ -35,7 +37,7 @@ async def update_profile(payload: dict = Body(...)):
     if not user_id:
         raise HTTPNotFound("Sesi berakhir.")
     try:
-        user = auth_service.update_profile(user_id, payload)
+        user = await asyncio.to_thread(auth_service.update_profile, user_id, payload)
         session["userName"] = user.get("name", "")
         session["userEmail"] = user.get("email", "")
         photo = user.get("photo")
@@ -52,7 +54,7 @@ async def change_password(payload: dict = Body(...)):
     if not user_id:
         raise HTTPNotFound("Sesi berakhir.")
     try:
-        auth_service.change_password(user_id, payload)
+        await asyncio.to_thread(auth_service.change_password, user_id, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     return {"message": "Password berhasil diubah."}
@@ -67,7 +69,7 @@ async def upload_photo(file: UploadFile = File(...)):
     if not file or not getattr(file, "filename", None):
         raise HTTPBadRequest("File foto wajib diisi.")
     raw = await file.read()
-    user = auth_service.upload_photo(user_id, raw, file.filename, file.content_type or "image/jpeg")
+    user = await asyncio.to_thread(auth_service.upload_photo, user_id, raw, file.filename, file.content_type or "image/jpeg")
     photo = user.get("photo")
     session["userPhoto"] = photo if isinstance(photo, str) else (photo or {}).get("url")
     return user
@@ -79,7 +81,7 @@ async def upload_photo(file: UploadFile = File(...)):
 @api_login_required
 @role_required("admin")
 async def show(user_id: str):
-    doc = auth_service.get_user(user_id)
+    doc = await asyncio.to_thread(auth_service.get_user, user_id)
     if not doc:
         raise HTTPNotFound("User tidak ditemukan.")
     return doc
@@ -90,7 +92,7 @@ async def show(user_id: str):
 @role_required("admin")
 async def update(user_id: str, payload: dict = Body(...)):
     try:
-        result = auth_service.update_user(user_id, payload)
+        result = await asyncio.to_thread(auth_service.update_user, user_id, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     if not result:
@@ -110,7 +112,7 @@ async def update(user_id: str, payload: dict = Body(...)):
 @api_login_required
 @role_required("admin")
 async def destroy(user_id: str):
-    if not auth_service.delete_user(user_id):
+    if not await asyncio.to_thread(auth_service.delete_user, user_id):
         raise HTTPNotFound("User tidak ditemukan.")
     return {"message": "User berhasil dihapus."}
 
@@ -119,7 +121,7 @@ async def destroy(user_id: str):
 @api_login_required
 @role_required("admin")
 async def toggle_active(user_id: str):
-    result = auth_service.toggle_active(user_id)
+    result = await asyncio.to_thread(auth_service.toggle_active, user_id)
     if not result:
         raise HTTPNotFound("User tidak ditemukan.")
     return result
