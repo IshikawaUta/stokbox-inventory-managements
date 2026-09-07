@@ -166,3 +166,35 @@ class TestAppSessionProxy:
         proxy = _SessionProxy()
         assert callable(getattr(proxy, "get", None))
         assert callable(getattr(proxy, "keys", None))
+
+
+# ── Service Worker (sw.js) ─────────────────────────────────────────────
+
+
+class TestServiceWorker:
+    def test_sw_js_file_exists(self):
+        import os
+        sw_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "sw.js")
+        assert os.path.isfile(sw_path), "static/sw.js tidak ditemukan"
+
+    def test_sw_js_is_valid_javascript(self):
+        import os
+        sw_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "sw.js")
+        with open(sw_path, "r") as f:
+            content = f.read()
+
+        # Cek struktur dasar JavaScript yang valid
+        assert "const CACHE_NAME" in content, "CACHE_NAME harus didefinisikan"
+        assert "const STATIC_ASSETS" in content, "STATIC_ASSETS harus didefinisikan"
+        assert "self.addEventListener" in content, "Harus ada event listener"
+        assert content.count("self.addEventListener") >= 3, "Minimal 3 event listener (install, activate, fetch)"
+
+    def test_sw_js_has_required_events(self):
+        import os
+        sw_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "sw.js")
+        with open(sw_path, "r") as f:
+            content = f.read()
+
+        assert "'install'" in content or '"install"' in content
+        assert "'activate'" in content or '"activate"' in content
+        assert "'fetch'" in content or '"fetch"' in content

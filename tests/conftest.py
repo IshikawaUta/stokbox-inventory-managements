@@ -18,6 +18,7 @@ os.environ["USE_MONGOMOCK"] = "1"
 os.environ["MONGO_URI"] = ""
 os.environ["MONGO_DB_NAME"] = "test_inventaris"
 os.environ["APP_SECRET_KEY"] = "test-secret-key"
+os.environ["APP_ENV"] = "development"
 os.environ["FENRIR_DEV_MODE"] = "0"
 # Disable rate limiting during tests
 os.environ["FENRIR_RATE_LIMIT"] = "0"
@@ -25,23 +26,26 @@ os.environ["FENRIR_RATE_LIMIT"] = "0"
 
 @pytest.fixture(autouse=True)
 def _reset_db():
-    """Reset singleton DB sebelum dan sesudah setiap tes."""
+    """Reset singleton DB dan cache sebelum dan sesudah setiap tes."""
     from config.database import reset_db
+    from config.cache import cache
     reset_db()
+    cache.clear()
     yield
     reset_db()
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)
-def _disable_rate_limit():
-    """Nonaktifkan rate limit selama testing."""
-    from app import app
-    from fenrir.middleware import RateLimitMiddleware
-    # Remove RateLimitMiddleware before the ASGI stack is compiled
+def _disable_middleware():
+    """Nonaktifkan rate limit, CSRF, security headers, dan ETag selama testing."""
+    from app import app, ETagMiddleware
+    from fenrir.middleware import RateLimitMiddleware, CSRFMiddleware, SecurityHeadersMiddleware
+    # Remove middleware yang mengganggu testing
     original = list(app._asgi_middlewares)
     app._asgi_middlewares = [
         (cls, opts) for cls, opts in app._asgi_middlewares
-        if cls is not RateLimitMiddleware
+        if cls not in (RateLimitMiddleware, CSRFMiddleware, SecurityHeadersMiddleware, ETagMiddleware)
     ]
     app._asgi_app = None  # Force recompilation
     yield
