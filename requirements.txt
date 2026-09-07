@@ -1,4 +1,4 @@
-fenrir-framework>=3.1.3
+fenrir-framework
 pydantic>=2.0.0
 Jinja2>=3.0.0
 httpx
@@ -11,6 +11,5 @@ qrcode
 Pillow
 python-barcode
 python-multipart>=0.0.18
-bcrypt>=4.0.0
 pytest>=8.0.0
 mongomock>=4.0.0
