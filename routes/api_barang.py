@@ -1,11 +1,13 @@
 """API CRUD barang (item inventaris)."""
 from __future__ import annotations
 
+import asyncio
 import io as _io
 
 from fenrir import (
     Body,
     Blueprint,
+    Depends,
     File,
     HTTPBadRequest,
     HTTPNotFound,
@@ -16,6 +18,7 @@ from fenrir import (
 )
 from openpyxl import Workbook, load_workbook
 
+from config.schemas import PaginationParams
 from services import barang_service, cloudinary_service
 from utils.decorators import api_login_required, role_required
 
@@ -28,9 +31,11 @@ async def index(
     keyword: str = Query(""),
     kategori_id: str = Query(""),
     stok: str = Query(""),
+    pagination: PaginationParams = Depends(PaginationParams),
 ):
     return {
-        "data": barang_service.list_barang(
+        "data": await asyncio.to_thread(
+            barang_service.list_barang,
             keyword=keyword, kategori_id=kategori_id, stok_filter=stok
         )
     }
@@ -39,7 +44,7 @@ async def index(
 @barang_bp.get("/check-kode")
 @api_login_required
 async def check_kode(kode: str = Query(""), exclude_id: str = Query("")):
-    available = barang_service.check_kode(kode, exclude_id)
+    available = await asyncio.to_thread(barang_service.check_kode, kode, exclude_id)
     return {
         "available": available,
         "message": "Kode tersedia." if available else "Kode sudah digunakan.",
@@ -49,13 +54,17 @@ async def check_kode(kode: str = Query(""), exclude_id: str = Query("")):
 @barang_bp.get("/low-stock")
 @role_required("admin")
 async def low_stock(limit: int = Query(20)):
-    return {"data": barang_service.list_low_stock(limit=limit)}
+    return {"data": await asyncio.to_thread(barang_service.list_low_stock, limit=limit)}
 
 
 @barang_bp.get("/lookup")
 @api_login_required
-async def lookup(keyword: str = Query(""), limit: int = Query(50)):
-    return {"data": barang_service.list_lookup(keyword=keyword, limit=limit)}
+async def lookup(
+    keyword: str = Query(""),
+    limit: int = Query(50),
+    pagination: PaginationParams = Depends(PaginationParams),
+):
+    return {"data": await asyncio.to_thread(barang_service.list_lookup, keyword=keyword, limit=limit)}
 
 
 @barang_bp.get("/import-template")
@@ -69,8 +78,9 @@ async def import_template():
     ws.append(headers)
     ws.append(["BRG-001", "Contoh Barang 1", "Elektronik", "pcs", 10, 2, "Gudang A", "Deskripsi contoh"])
     ws.append(["BRG-002", "Contoh Barang 2", "ATK", "pcs", 50, 10, "Rak 1", "Deskripsi barang 2"])
+    from openpyxl.styles import Font
     for cell in ws[1]:
-        cell.font = cell.font.copy(bold=True)
+        cell.font = Font(bold=True, color=cell.font.color, size=cell.font.size, name=cell.font.name)
     buf = _io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -97,7 +107,7 @@ async def import_xlsx(file: UploadFile = File(...)):
         if not rows:
             raise HTTPBadRequest("File kosong.")
         headers = [str(h or "").strip().lower() for h in rows[0]]
-        result = barang_service.import_xlsx(headers, rows[1:])
+        result = await asyncio.to_thread(barang_service.import_xlsx, headers, rows[1:])
         return result
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
@@ -114,7 +124,8 @@ async def upload_foto(file: UploadFile = File(...), kode: str = Query("")):
     if not file or not file.filename:
         raise HTTPBadRequest("File tidak valid.")
     try:
-        info = cloudinary_service.upload_barang_photo(
+        info = await asyncio.to_thread(
+            cloudinary_service.upload_barang_photo,
             file.file, kode, filename=file.filename
         )
     except Exception as exc:
@@ -161,7 +172,8 @@ async def upload_foto_base64(kode: str = Query("")):
         ext = "jpg"
         if filename and "." in filename:
             ext = filename.rsplit(".", 1)[-1].lower()
-        info = cloudinary_service.upload_barang_photo(
+        info = await asyncio.to_thread(
+            cloudinary_service.upload_barang_photo,
             _io.BytesIO(raw), kode, filename=filename, ext=ext
         )
     except Exception as exc:
@@ -187,7 +199,8 @@ async def upload_foto_raw(kode: str = Query("")):
         ext = "gif"
     filename = f"photo.{ext}"
     try:
-        info = cloudinary_service.upload_barang_photo(
+        info = await asyncio.to_thread(
+            cloudinary_service.upload_barang_photo,
             _io.BytesIO(raw), kode, filename=filename, ext=ext
         )
     except Exception as exc:
@@ -200,7 +213,7 @@ async def upload_foto_raw(kode: str = Query("")):
 @barang_bp.get("/<barang_id>")
 @api_login_required
 async def show(barang_id: str):
-    doc = barang_service.get_barang(barang_id)
+    doc = await asyncio.to_thread(barang_service.get_barang, barang_id)
     if not doc:
         raise HTTPNotFound("Barang tidak ditemukan.")
     return doc
@@ -210,7 +223,7 @@ async def show(barang_id: str):
 @role_required("admin")
 async def create(payload: dict = Body(...)):
     try:
-        return barang_service.create_barang(payload)
+        return await asyncio.to_thread(barang_service.create_barang, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
 
@@ -219,7 +232,7 @@ async def create(payload: dict = Body(...)):
 @role_required("admin")
 async def update(barang_id: str, payload: dict = Body(...)):
     try:
-        result = barang_service.update_barang(barang_id, payload)
+        result = await asyncio.to_thread(barang_service.update_barang, barang_id, payload)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     if not result:
@@ -231,7 +244,7 @@ async def update(barang_id: str, payload: dict = Body(...)):
 @role_required("admin")
 async def destroy(barang_id: str):
     try:
-        deleted = barang_service.delete_barang(barang_id)
+        deleted = await asyncio.to_thread(barang_service.delete_barang, barang_id)
     except ValueError as exc:
         raise HTTPBadRequest(str(exc))
     if not deleted:
@@ -245,10 +258,9 @@ async def riwayat_stok(
     barang_id: str,
     keyword: str = Query(""),
     tipe: str = Query(""),
-    page: int = Query(1),
-    per_page: int = Query(25),
+    pagination: PaginationParams = Depends(PaginationParams),
 ):
-    per_page = min(per_page, 100)
-    return barang_service.get_riwayat_stok(
-        barang_id, keyword=keyword, tipe=tipe, page=page, per_page=per_page,
+    return await asyncio.to_thread(
+        barang_service.get_riwayat_stok,
+        barang_id, keyword=keyword, tipe=tipe, page=pagination.page, per_page=pagination.per_page,
     )
