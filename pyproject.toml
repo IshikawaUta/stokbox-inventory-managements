@@ -1,0 +1,26 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app", "config", "routes", "services", "utils", "models"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/static/*",
+    "*/templates/*",
+    "*/shibokensupport/*",
+    "*/signature_bootstrap.py",
+    "*/PySide6/*",
+    "*/.local/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
