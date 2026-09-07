@@ -18,6 +18,11 @@
 </div>
 {% endblock %}
 
+{% block extra_scripts %}
+<link href="/static/vendor/datatables/dataTables.bootstrap5.min.css" rel="stylesheet">
+{% endblock %}
 {% block scripts %}
+<script src="/static/vendor/datatables/jquery.dataTables.min.js" defer></script>
+<script src="/static/vendor/datatables/dataTables.bootstrap5.min.js" defer></script>
 <script src="/static/js/stok_penyesuaian.js"></script>
 {% endblock %}

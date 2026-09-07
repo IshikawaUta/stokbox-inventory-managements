@@ -38,6 +38,10 @@
 </div>
 {% endblock %}
 
+{% block extra_scripts %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+{% endblock %}
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js" defer crossorigin="anonymous"></script>
 <script src="/static/js/laporan_stok.js"></script>
 {% endblock %}
