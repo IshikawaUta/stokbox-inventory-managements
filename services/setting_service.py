@@ -17,11 +17,20 @@ DEFAULTS = {
 }
 
 
+def _get_cache():
+    from config.cache import cache
+    return cache
+
+
 def get_settings() -> dict:
-    """Kembalikan seluruh setting sebagai dict (key -> value)."""
+    """Kembalikan seluruh setting sebagai dict (cached 5 menit)."""
+    cached = _get_cache().get("app_settings")
+    if cached is not None:
+        return cached
     result = dict(DEFAULTS)
     for doc in setting().find():
         result[doc["key"]] = doc.get("value")
+    _get_cache().set("app_settings", result, ttl=300)
     return result
 
 
@@ -39,6 +48,7 @@ def update_settings(payload: dict) -> dict:
             {"$set": {"value": value, "updated_at": utcnow()}},
             upsert=True,
         )
+    _get_cache().invalidate("app_settings")
     return get_settings()
 
 
@@ -64,4 +74,5 @@ def upload_asset(kind: str, raw: bytes, filename: str, content_type: str) -> dic
         {"$set": {"value": url, "updated_at": utcnow()}},
         upsert=True,
     )
+    _get_cache().invalidate("app_settings")
     return {kind: url}

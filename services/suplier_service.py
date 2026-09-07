@@ -7,14 +7,26 @@ from models import suplier
 from utils.helpers import parse_object_id, serialize_doc, serialize_docs, utcnow
 
 
+def _get_cache():
+    """Lazy import cache untuk hindari circular import."""
+    from config.cache import cache
+    return cache
+
+
 def list_suplier(keyword: str = "") -> list[dict]:
+    cache_key = f"suplier_list:{keyword}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
     query: dict = {}
     if keyword:
         query["$or"] = [
             {"nama": {"$regex": keyword, "$options": "i"}},
             {"perusahaan": {"$regex": keyword, "$options": "i"}},
         ]
-    return serialize_docs(list(suplier().find(query).sort("nama", 1)))
+    result = serialize_docs(list(suplier().find(query).sort("nama", 1)))
+    _get_cache().set(cache_key, result, ttl=300)
+    return result
 
 
 def get_suplier(suplier_id: str) -> Optional[dict]:
@@ -47,6 +59,7 @@ def create_suplier(payload: dict) -> dict:
         userRole = session.get("userRole", "")
         aktivitas_service.log(userId, userName, userRole, "create", "suplier", str(result.inserted_id),
             f"Membuat suplier {created.get('nama', '')}")
+    _get_cache().invalidate("suplier_list:")
     return created
 
 
@@ -71,6 +84,7 @@ def update_suplier(suplier_id: str, payload: dict) -> Optional[dict]:
         userRole = session.get("userRole", "")
         aktivitas_service.log(userId, userName, userRole, "update", "suplier", suplier_id,
             f"Memperbarui suplier {updated.get('nama', '')}")
+    _get_cache().invalidate("suplier_list:")
     return updated
 
 
@@ -92,4 +106,5 @@ def delete_suplier(suplier_id: str) -> bool:
         aktivitas_service.log(userId, userName, userRole, "delete", "suplier", suplier_id,
             f"Menghapus suplier {current.get('nama', '')}")
     result = suplier().delete_one({"_id": oid})
+    _get_cache().invalidate("suplier_list:")
     return result.deleted_count > 0

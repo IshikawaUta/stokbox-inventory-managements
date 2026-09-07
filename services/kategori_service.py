@@ -9,11 +9,23 @@ from models import kategori
 from utils.helpers import parse_object_id, serialize_doc, serialize_docs, utcnow
 
 
+def _get_cache():
+    """Lazy import cache untuk hindari circular import."""
+    from config.cache import cache
+    return cache
+
+
 def list_kategori(keyword: str = "") -> list[dict]:
+    cache_key = f"kategori_list:{keyword}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
     query: dict = {}
     if keyword:
         query["nama_kategori"] = {"$regex": keyword, "$options": "i"}
-    return serialize_docs(list(kategori().find(query).sort("nama_kategori", 1)))
+    result = serialize_docs(list(kategori().find(query).sort("nama_kategori", 1)))
+    _get_cache().set(cache_key, result, ttl=300)
+    return result
 
 
 def get_kategori(kategori_id: str) -> Optional[dict]:
@@ -46,6 +58,7 @@ def create_kategori(payload: dict) -> dict:
         userRole = session.get("userRole", "")
         aktivitas_service.log(userId, userName, userRole, "create", "kategori", str(result.inserted_id),
             f"Membuat kategori {created.get('nama_kategori', '')}")
+    _get_cache().invalidate("kategori_list:")
     return created
 
 
@@ -74,6 +87,7 @@ def update_kategori(kategori_id: str, payload: dict) -> Optional[dict]:
         userRole = session.get("userRole", "")
         aktivitas_service.log(userId, userName, userRole, "update", "kategori", kategori_id,
             f"Memperbarui kategori {updated.get('nama_kategori', '')}")
+    _get_cache().invalidate("kategori_list:")
     return updated
 
 
@@ -95,4 +109,5 @@ def delete_kategori(kategori_id: str) -> bool:
         aktivitas_service.log(userId, userName, userRole, "delete", "kategori", kategori_id,
             f"Menghapus kategori {current.get('nama_kategori', '')}")
     result = kategori().delete_one({"_id": oid})
+    _get_cache().invalidate("kategori_list:")
     return result.deleted_count > 0

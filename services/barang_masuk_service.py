@@ -17,6 +17,12 @@ from utils.helpers import (
 from utils.security import generate_no_transaksi
 
 
+def _get_cache():
+    """Lazy import cache untuk hindari circular import."""
+    from config.cache import cache
+    return cache
+
+
 def list_barang_masuk(
     keyword: str = "",
     tanggal_awal: str = "",
@@ -42,6 +48,11 @@ def list_barang_masuk(
         oid = parse_object_id(suplier_id)
         if oid is not None: query["suplier_id"] = oid
 
+    cache_key = f"barang_masuk_list:{keyword}:{tanggal_awal}:{tanggal_akhir}:{suplier_id}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
+
     suplier_map = {s["_id"]: s.get("nama") for s in suplier().find({})}
 
     pipeline = [
@@ -64,7 +75,9 @@ def list_barang_masuk(
         detail = d.get("detail", [])
         d["item_count"] = len(detail)
         d["total_jumlah"] = sum(int(x.get("jumlah", 0)) for x in detail)
-    return serialize_docs(docs)
+    result = serialize_docs(docs)
+    _get_cache().set(cache_key, result, ttl=120)
+    return result
 
 
 
@@ -179,6 +192,9 @@ def create_barang_masuk(payload: dict) -> dict:
                 stok_sebelum, stok_sesudah, item["jumlah"], "masuk",
                 ref_id=result_id, ref_no=no_transaksi)
 
+    _get_cache().invalidate("barang_masuk_list:")
+    _get_cache().invalidate("barang_list:")
+    _get_cache().invalidate("dashboard_stats")
     return get_barang_masuk(result_id) or {}
 
 
@@ -294,4 +310,7 @@ def delete_barang_masuk(transaksi_id: str) -> bool:
                 keterangan="Penghapusan barang masuk")
 
     result = barang_masuk().delete_one({"_id": oid})
+    _get_cache().invalidate("barang_masuk_list:")
+    _get_cache().invalidate("barang_list:")
+    _get_cache().invalidate("dashboard_stats")
     return result.deleted_count > 0

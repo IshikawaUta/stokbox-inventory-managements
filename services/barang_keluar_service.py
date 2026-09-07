@@ -17,6 +17,12 @@ from utils.helpers import (
 from utils.security import generate_no_transaksi
 
 
+def _get_cache():
+    """Lazy import cache untuk hindari circular import."""
+    from config.cache import cache
+    return cache
+
+
 def list_barang_keluar(
     keyword: str = "",
     tanggal_awal: str = "",
@@ -41,6 +47,11 @@ def list_barang_keluar(
     if tujuan:
         query["tujuan_penerima"] = {"$regex": tujuan, "$options": "i"}
 
+    cache_key = f"barang_keluar_list:{keyword}:{tanggal_awal}:{tanggal_akhir}:{tujuan}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
+
     pipeline = [
         {"$match": query},
         {"$lookup": {
@@ -59,7 +70,9 @@ def list_barang_keluar(
         detail = d.get("detail", [])
         d["item_count"] = len(detail)
         d["total_jumlah"] = sum(int(x.get("jumlah", 0)) for x in detail)
-    return serialize_docs(docs)
+    result = serialize_docs(docs)
+    _get_cache().set(cache_key, result, ttl=120)
+    return result
 
 
 
@@ -153,6 +166,9 @@ def create_barang_keluar(payload: dict) -> dict:
                 stok_sebelum, stok_sesudah, -int(item["jumlah"]), "keluar",
                 ref_id=result_id, ref_no=no_transaksi)
 
+    _get_cache().invalidate("barang_keluar_list:")
+    _get_cache().invalidate("barang_list:")
+    _get_cache().invalidate("dashboard_stats")
     return get_barang_keluar(result_id) or {}
 
 

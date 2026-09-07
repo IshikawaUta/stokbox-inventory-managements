@@ -16,7 +16,27 @@ from utils.helpers import (
 )
 
 
+def _get_cache():
+    """Lazy import cache untuk hindari circular import."""
+    from config.cache import cache
+    return cache
+
+
+def _invalidate_barang_caches():
+    """Invalidate semua cache terkait barang."""
+    c = _get_cache()
+    c.invalidate("barang_list:")
+    c.invalidate("dashboard_stats")
+    c.invalidate("low_stock:")
+    c.invalidate("error_context")
+
+
 def list_barang(keyword: str = "", kategori_id: str = "", stok_filter: str = "") -> list[dict]:
+    cache_key = f"barang_list:{keyword}:{kategori_id}:{stok_filter}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
+
     query: dict = {}
     if keyword:
         query["$or"] = [
@@ -29,16 +49,16 @@ def list_barang(keyword: str = "", kategori_id: str = "", stok_filter: str = "")
             query["kategori_id"] = oid
 
     if stok_filter == "hampir-habis":
-        all_items = list(barang().find(query).sort("created_at", DESCENDING))
-        items = [d for d in all_items if 0 < int(d.get("stok", 0)) <= int(d.get("stok_minimum", 0))]
+        query["$expr"] = {"$and": [
+            {"$gt": ["$stok", 0]},
+            {"$lte": ["$stok", "$stok_minimum"]},
+        ]}
     elif stok_filter == "habis":
         query["stok"] = 0
-        items = list(barang().find(query).sort("created_at", DESCENDING))
     elif stok_filter == "tersedia":
-        all_items = list(barang().find(query).sort("created_at", DESCENDING))
-        items = [d for d in all_items if int(d.get("stok", 0)) > int(d.get("stok_minimum", 0))]
-    else:
-        items = list(barang().find(query).sort("created_at", DESCENDING))
+        query["$expr"] = {"$gt": ["$stok", "$stok_minimum"]}
+
+    items = list(barang().find(query).sort("created_at", DESCENDING))
 
     kategori_map = {d["_id"]: d for d in kategori().find({})}
     for item in items:
@@ -49,7 +69,9 @@ def list_barang(keyword: str = "", kategori_id: str = "", stok_filter: str = "")
         else:
             item["nama_kategori"] = None
             item["icon_kategori"] = None
-    return serialize_docs(items)
+    result = serialize_docs(items)
+    _get_cache().set(cache_key, result, ttl=120)
+    return result
 
 
 def get_barang(barang_id: str) -> Optional[dict]:
@@ -135,6 +157,7 @@ def create_barang(payload: dict) -> dict:
         catat_riwayat_stok(str(result.inserted_id), created.get("kode_barang", ""),
             created.get("nama_barang", ""), 0, stok, stok, "edit_stok_awal",
             keterangan="Stok awal")
+    _invalidate_barang_caches()
     return created
 
 
@@ -200,6 +223,7 @@ def update_barang(barang_id: str, payload: dict) -> Optional[dict]:
                 old_stok, new_stok, new_stok - old_stok, "edit_stok_awal",
                 keterangan="Perubahan stok awal")
 
+    _invalidate_barang_caches()
     return get_barang(barang_id)
 
 
@@ -227,6 +251,7 @@ def delete_barang(barang_id: str) -> bool:
         aktivitas_service.log(userId, userName, userRole, "delete", "barang", barang_id,
             f"Menghapus barang {current.get('kode_barang', '')} - {current.get('nama_barang', '')}")
     result = barang().delete_one({"_id": oid})
+    _invalidate_barang_caches()
     return result.deleted_count > 0
 
 
@@ -243,7 +268,11 @@ def check_kode(kode: str, exclude_id: str = "") -> bool:
 
 
 def dashboard_stats() -> dict:
-    """Ringkasan statistik untuk dashboard - lengkap seperti PHP."""
+    """Ringkasan statistik untuk dashboard - cached 5 menit."""
+    cached = _get_cache().get("dashboard_stats")
+    if cached is not None:
+        return cached
+
     from datetime import date, timedelta
     from models import (
         suplier, barang_masuk, barang_keluar, stok_penyesuaian, users
@@ -285,7 +314,7 @@ def dashboard_stats() -> dict:
     ]))
     penyesuaian_qty = penyesuaian_qty_result[0]["total"] if penyesuaian_qty_result else 0
 
-    # Stok hampir habis & kosong via aggregation
+    # Stok hampir habis & kosong via aggregation (single query)
     stok_stats = list(barang().aggregate([
         {"$project": {"stok": 1, "stok_minimum": 1}},
         {"$group": {
@@ -316,7 +345,7 @@ def dashboard_stats() -> dict:
     total_stok = nilai_result[0]["total_stok"] if nilai_result else 0
     total_nilai = nilai_result[0]["total_nilai"] if nilai_result else 0
 
-    return {
+    result = {
         "total_barang": total_barang,
         "total_stok": total_stok,
         "total_kategori": total_kategori,
@@ -335,16 +364,24 @@ def dashboard_stats() -> dict:
         "qty_penyesuaian_bulan_ini": penyesuaian_qty,
         "total_nilai": total_nilai,
     }
+    _get_cache().set("dashboard_stats", result, ttl=300)
+    return result
 
 
 def list_low_stock(limit: int = 20) -> list[dict]:
-    """Daftar barang dengan stok <= stok_minimum."""
-    items = []
-    for doc in barang().find({}).sort([("stok", 1), ("nama_barang", 1)]):
-        if int(doc.get("stok", 0)) <= int(doc.get("stok_minimum", 0)):
-            items.append(serialize_doc(doc))
-        if len(items) >= limit:
-            break
+    """Daftar barang dengan stok <= stok_minimum (optimized via MongoDB)."""
+    cache_key = f"low_stock:{limit}"
+    cached = _get_cache().get(cache_key)
+    if cached is not None:
+        return cached
+
+    pipeline = [
+        {"$match": {"$expr": {"$lte": ["$stok", "$stok_minimum"]}}},
+        {"$sort": {"stok": 1, "nama_barang": 1}},
+        {"$limit": limit},
+    ]
+    items = serialize_docs(list(barang().aggregate(pipeline)))
+    _get_cache().set(cache_key, items, ttl=120)
     return items
 
 
