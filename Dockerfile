@@ -17,6 +17,7 @@ COPY . .
 # Create uploads directory
 RUN mkdir -p static/uploads/barang static/uploads/users static/uploads/settings
 
-EXPOSE 8000
+ENV PORT=8000
+EXPOSE ${PORT}
 
-CMD ["fenrir", "run", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "fenrir run app:app --host 0.0.0.0 --port ${PORT} --workers 4 --disable-dashboard"]
