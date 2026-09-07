@@ -34,11 +34,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -v --tb=short
+          python -m pytest tests/ -v --tb=short --cov=. --cov-report=term-missing --cov-report=xml
         env:
           USE_MONGOMOCK: "1"
           MONGO_URI: "mongodb://localhost:27017/test"
           MONGO_DB_NAME: "test_inventaris"
           APP_SECRET_KEY: "test-secret-key"
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+          verbose: true
