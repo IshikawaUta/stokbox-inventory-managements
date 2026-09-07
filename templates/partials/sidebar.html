@@ -2,7 +2,7 @@
     <div class="brand-box">
         <div class="d-flex align-items-center gap-3">
             {% if app_logo %}
-            <img src="{{ app_logo }}" alt="Logo {{ app_name }}" class="brand-logo">
+            <img src="{{ app_logo }}" alt="Logo {{ app_name }}" class="brand-logo" fetchpriority="high">
             {% else %}
             <div class="brand-mark">{{ app_name[0]|upper }}</div>
             {% endif %}
@@ -19,7 +19,7 @@
     <div class="sidebar-footer p-2 d-none d-lg-block">
         <div class="d-flex align-items-center gap-2 min-w-0">
             {% if user_photo %}
-            <img src="{{ user_photo }}" alt="{{ user_name }}" class="sidebar-user-photo">
+            <img src="{{ user_photo }}" alt="{{ user_name }}" class="sidebar-user-photo" loading="lazy">
             {% else %}
             <div class="sidebar-user-photo-placeholder avatar">{{ user_name[0]|upper if user_name else '?' }}</div>
             {% endif %}

@@ -49,7 +49,7 @@
     <div class="dropdown">
         <button class="profile-chip user-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
             {% if user_photo %}
-            <img src="{{ user_photo }}" alt="{{ user_name }}" class="avatar user-menu-photo">
+            <img src="{{ user_photo }}" alt="{{ user_name }}" class="avatar user-menu-photo" loading="lazy">
             {% else %}
             <div class="avatar">{{ user_name[0]|upper if user_name else '?' }}</div>
             {% endif %}
