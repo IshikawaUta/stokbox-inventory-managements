@@ -36,6 +36,7 @@ def _build_client() -> MongoClient:
         minPoolSize=5,
         connectTimeoutMS=5000,
         socketTimeoutMS=10000,
+        maxIdleTimeMS=300000,
     )
 
 
